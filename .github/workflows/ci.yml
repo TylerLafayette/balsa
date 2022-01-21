@@ -4,7 +4,7 @@ name: CI
 
 jobs:
   check:
-    name: Check
+    name: cargo check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -16,9 +16,10 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
+          args: --manifest-path balsa/Cargo.toml
 
   test:
-    name: Test Suite
+    name: cargo test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -30,9 +31,10 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
+          args: --manifest-path balsa/Cargo.toml
 
   fmt:
-    name: Rustfmt
+    name: cargo fmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -45,10 +47,10 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --all -- --check
+          args: --all -- --check --manifest-path balsa/Cargo.toml
 
   clippy:
-    name: Clippy
+    name: cargo clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -61,4 +63,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: -- -D warnings
+          args: --manifest-path balsa/Cargo.toml --all -- -D warnings
