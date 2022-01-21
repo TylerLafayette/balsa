@@ -111,7 +111,8 @@ where
     fn combine(&self, with: Vec<T>) -> Vec<T> {
         let mut extended_vec = vec![self.clone()];
         extended_vec.extend(with);
-        return extended_vec;
+
+        extended_vec
     }
 }
 
@@ -121,11 +122,11 @@ where
 {
     fn combine(&self, with: Option<Vec<T>>) -> Vec<T> {
         let mut extended_vec = vec![self.clone()];
-        if with.is_some() {
-            extended_vec.extend(with.unwrap());
+        if let Some(with) = with {
+            extended_vec.extend(with);
         }
 
-        return extended_vec;
+        extended_vec
     }
 }
 
@@ -490,8 +491,6 @@ pub(crate) fn take_until_char_parser<'a>(terminator: char) -> ParserB<'a, String
 /// Creates a [`ParserB<'a, String>`] which takes characters until it reaches one that is not
 /// in the `allowed_chars` array.
 pub(crate) fn take_while_chars_parser<'a>(allowed_chars: &'a [char]) -> ParserB<'a, String> {
-    let allowed_chars = allowed_chars.clone();
-
     ParserB::new(move |pos: i32, input: &'a str| {
         let token = input
             .to_string()
@@ -529,7 +528,7 @@ where
             item(),
             optional(many(fmap_chain(delimiter(), item(), |_, i| i))),
         )),
-        |t| t.unwrap_or_else(|| Vec::new()),
+        |t| t.unwrap_or_else(Vec::new),
     )
 }
 
