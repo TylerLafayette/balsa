@@ -532,6 +532,21 @@ where
     )
 }
 
+/// Creates a [`Parser`] which parses key value pairs in the following format:
+/// <`key`><`delimiter`><`value`>. It returns a tuple of (`KT`, `VT`).
+pub(crate) fn key_sep_value<'a, K, KT: 'a, D, DT: 'a, V, VT: 'a>(
+    key: K,
+    delimiter: D,
+    value: V,
+) -> ParserB<'a, (KT, VT)>
+where
+    K: Parser<'a, KT> + 'a,
+    D: Parser<'a, DT> + 'a,
+    V: Parser<'a, VT> + 'a,
+{
+    fmap_chain(key, right(delimiter, value), |k, v| (k, v))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -684,6 +699,59 @@ mod tests {
 
         p.parse(0, invalid_input).expect_err(&format!(
             "Array parser should not successfully parse input `{}`",
+            invalid_input
+        ));
+    }
+
+    #[test]
+    fn test_key_value() {
+        let allowed_variable_chars =
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789-_"
+                .chars()
+                .collect::<Vec<char>>();
+
+        let variable_name_p = || take_while_chars_parser(&allowed_variable_chars);
+
+        let ws_chars = vec![' ', '\t'];
+        let ws = || optional(take_while_chars_parser(&ws_chars));
+
+        let string_literal_p = || {
+            middle(
+                char_parser('"'),
+                take_until_char_parser('"'),
+                char_parser('"'),
+            )
+        };
+
+        let str_element_p = || middle(ws(), string_literal_p(), ws());
+
+        let delimiter_p = || middle(ws(), char_parser(':'), ws());
+
+        let p = key_sep_value(variable_name_p(), delimiter_p(), str_element_p());
+
+        let valid_input = r#"helloWorld: "value""#;
+        let valid_output = ("helloWorld".to_string(), "value".to_string());
+        let invalid_input = r#"h'elloWorld: "value""#;
+
+        let (remainder, parsed) = p.parse(0, valid_input).expect(&format!(
+            "Key-value parser should successfully parse input `{}`",
+            valid_input
+        ));
+
+        assert_eq!(
+            parsed.token, valid_output,
+            "Key-value parser failed to parse `{}`.\n\tExpected: `{:?}`\n\tGot: `{:?}`",
+            valid_input, valid_output, parsed.token,
+        );
+
+        assert_eq!(
+            remainder, "",
+            "Key-value parser produced incorrect remainder for input `{}`.\n\tExpected: `{:?}`\n\tGot: `{:?}`",
+            valid_input, "", remainder,
+        );
+
+        p.parse(0, invalid_input).expect_err(&format!(
+            "Key-value parser should not successfully parse input `{}`",
             invalid_input
         ));
     }
