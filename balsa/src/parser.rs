@@ -21,6 +21,7 @@ pub(crate) trait Parser<'a, T>: 'a {
     fn parse(&self, pos: i32, input: &'a str) -> ParseResult<'a, T>;
 }
 
+/// A wrapper struct that holds a [`Parser<'a, T>`] in a [`Box`].
 pub(crate) struct ParserB<'a, T> {
     parser: Box<dyn Parser<'a, T>>,
 }
@@ -159,7 +160,82 @@ where
     })
 }
 
-/// Creates a [`ParserB`] which parses the given char, returning it
+/// Creates a new [`Parser`] which chains together two parsers but ignores the second (right)
+/// [`Parser`]'s token output.
+///
+/// Parses input with the `left_p` [`Parser`], then feeds the output into the `right_p` [`Parser`].
+/// Finally, it ignores the right [`Parser`]'s token and returns the left's.
+pub(crate) fn left<'a, L, R, LT, RT>(left_p: L, right_p: R) -> ParserB<'a, LT>
+where
+    L: Parser<'a, LT> + 'a,
+    R: Parser<'a, RT> + 'a,
+{
+    ParserB::new(move |pos: i32, input: &'a str| {
+        left_p
+            .parse(pos, input)
+            .and_then(|(remainder, left_parsed)| {
+                right_p
+                    .parse(left_parsed.end_pos, remainder)
+                    .map(|(remainder, right_parsed)| {
+                        (
+                            remainder,
+                            Parsed {
+                                start_pos: left_parsed.start_pos,
+                                end_pos: right_parsed.end_pos,
+                                token: left_parsed.token,
+                            },
+                        )
+                    })
+            })
+    })
+}
+
+/// Creates a new [`Parser`] which chains together two parsers but ignores the first (left)
+/// [`Parser`]'s token output.
+///
+/// Parses input with the `left` [`Parser`], then feeds the output into the `right` [`Parser`].
+/// Finally, it ignores the left [`Parser`]'s token and returns the right's.
+pub(crate) fn right<'a, L, R, LT, RT>(left_p: L, right_p: R) -> ParserB<'a, RT>
+where
+    L: Parser<'a, LT> + 'a,
+    R: Parser<'a, RT> + 'a,
+{
+    ParserB::new(move |pos: i32, input: &'a str| {
+        left_p
+            .parse(pos, input)
+            .and_then(|(remainder, left_parsed)| {
+                right_p
+                    .parse(left_parsed.end_pos, remainder)
+                    .map(|(remainder, right_parsed)| {
+                        (
+                            remainder,
+                            Parsed {
+                                start_pos: left_parsed.start_pos,
+                                end_pos: right_parsed.end_pos,
+                                token: right_parsed.token,
+                            },
+                        )
+                    })
+            })
+    })
+}
+
+/// Creates a new [`Parser`] which chains together three parsers but ignores the first (left)
+/// and last (right) [`Parser`]'s token output.
+///
+/// Parses input with the `left_p` [`Parser`], then feeds the output into the `right_p` [`Parser`].
+/// Finally, it ignores the left and right [`Parser`]'s token and returns the middle's.
+pub(crate) fn middle<'a, L, M, R, LT, MT, RT>(left_p: L, middle_p: M, right_p: R) -> ParserB<'a, MT>
+where
+    L: Parser<'a, LT> + 'a,
+    M: Parser<'a, MT> + 'a,
+    R: Parser<'a, RT> + 'a,
+    MT: 'a,
+{
+    right(left_p, left(middle_p, right_p))
+}
+
+/// Creates a [`ParserB<'a, char>`] which parses the given char, returning it
 /// as a token.
 pub(crate) fn char_parser<'a>(value: char) -> ParserB<'a, char> {
     ParserB::new(move |pos: i32, input: &'a str| {
@@ -180,7 +256,7 @@ pub(crate) fn char_parser<'a>(value: char) -> ParserB<'a, char> {
     })
 }
 
-/// Creates a [`ParserB`] which parses the given string, returning it
+/// Creates a [`ParserB<'a, String>`] which parses the given string, returning it
 /// as a token.
 pub(crate) fn string_parser<'a>(value: impl Into<String>) -> ParserB<'a, String> {
     let str_ = value.into();
@@ -192,6 +268,56 @@ pub(crate) fn string_parser<'a>(value: impl Into<String>) -> ParserB<'a, String>
     let first = fmap(char_parser(chars.next().unwrap()), String::from);
 
     chars.fold(first, |acc, p| chain(acc, char_parser(p)))
+}
+
+/// Creates a [`ParserB<'a, String>`] which takes characters until the `terminator` char is
+/// reached.
+pub(crate) fn take_until_char_parser<'a>(terminator: char) -> ParserB<'a, String> {
+    ParserB::new(move |pos: i32, input: &'a str| {
+        let token = input
+            .to_string()
+            .chars()
+            .take_while(|x| *x != terminator)
+            .collect::<String>();
+
+        if token.len() == 0 {
+            Err(ParseError::NotMatched)
+        } else {
+            Ok((
+                &input[token.len()..],
+                Parsed {
+                    start_pos: pos,
+                    end_pos: pos + (token.chars().count() as i32),
+                    token,
+                },
+            ))
+        }
+    })
+}
+
+/// Creates a [`ParserB<'a, String>`] which takes characters until it reaches one that is not
+/// in the `allowed_chars` array.
+pub(crate) fn take_while_chars_parser<'a>(allowed_chars: &'a [char]) -> ParserB<'a, String> {
+    ParserB::new(move |pos: i32, input: &'a str| {
+        let token = input
+            .to_string()
+            .chars()
+            .take_while(|x| allowed_chars.contains(x))
+            .collect::<String>();
+
+        if token.len() == 0 {
+            Err(ParseError::NotMatched)
+        } else {
+            Ok((
+                &input[token.len()..],
+                Parsed {
+                    start_pos: pos,
+                    end_pos: pos + (token.chars().count() as i32),
+                    token,
+                },
+            ))
+        }
+    })
 }
 
 #[cfg(test)]
@@ -242,6 +368,60 @@ mod tests {
         assert_eq!(
             remainder, " world",
             "String parser `Hello` should produce remainder ` world` for input `Hello world`"
+        );
+    }
+
+    #[test]
+    fn test_string_literal_parser() {
+        let p = middle(
+            char_parser('"'),
+            take_until_char_parser('"'),
+            char_parser('"'),
+        );
+
+        let (remainder, parsed) = p.parse(0, "\"Hello! @#$123456789\"").expect(
+            "String literal parser should successfully parse input `\"Hello! @#$123456789\"`",
+        );
+
+        assert_eq!(
+            parsed.token,
+            "Hello! @#$123456789",
+            "String literal parser failed to parse `\"Hello! @#$123456789\"`.\n\tExpected: `Hello! @#$123456789`\n\tGot: {}",
+            parsed.token
+        );
+
+        assert_eq!(
+            remainder,
+            "",
+            "String literal parser produced incorrect remainder for input `\"Hello! @#$123456789\"`.\n\tExpected: ``\n\tGot: `{}`",
+            remainder
+        );
+    }
+
+    #[test]
+    fn test_variable_name_parser() {
+        let allowed_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456789-_"
+            .chars()
+            .collect::<Vec<char>>();
+
+        let p = take_while_chars_parser(&allowed_chars);
+
+        let (remainder, parsed) = p
+            .parse(0, "helloWorld: ")
+            .expect("Variable name parser should successfully parse input `helloWorld: `");
+
+        assert_eq!(
+            parsed.token,
+            "helloWorld",
+            "Variable name parser failed to parse `helloWorld: `.\n\tExpected: `helloWorld`\n\tGot: {}",
+            parsed.token
+        );
+
+        assert_eq!(
+            remainder,
+            ": ",
+            "Variable name parser produced incorrect remainder for input `helloWorld: `.\n\tExpected: `: `\n\tGot: `{}`",
+            remainder
         );
     }
 }
