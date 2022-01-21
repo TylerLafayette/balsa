@@ -22,7 +22,7 @@ pub(crate) trait Parser<'a, T>: 'a {
 }
 
 /// A wrapper struct that holds a [`Parser<'a, T>`] in a [`Box`].
-pub(crate) struct ParserB<'a, T> {
+pub(crate) struct ParserB<'a, T: 'a> {
     parser: Box<dyn Parser<'a, T>>,
 }
 
@@ -38,6 +38,15 @@ impl<'a, T> ParserB<'a, T> {
 }
 
 impl<'a, T> Parser<'a, T> for ParserB<'a, T>
+where
+    T: 'a,
+{
+    fn parse(&self, pos: i32, input: &'a str) -> ParseResult<'a, T> {
+        self.parser.parse(pos, input)
+    }
+}
+
+impl<'a, T> Parser<'a, T> for &'a ParserB<'a, T>
 where
     T: 'a,
 {
@@ -80,7 +89,7 @@ impl Combinable<char, String> for char {
 }
 
 impl Combinable<char, String> for String {
-    /// Combines two chars into a String.
+    /// Combines a String and a char into a String.
     fn combine(&self, with: char) -> String {
         let mut s = String::new();
         s.push_str(self);
@@ -92,6 +101,31 @@ impl Combinable<char, String> for String {
 impl Combinable<String, String> for String {
     fn combine(&self, with: String) -> String {
         format!("{}{}", self, with)
+    }
+}
+
+impl<T> Combinable<Vec<T>, Vec<T>> for T
+where
+    T: Clone,
+{
+    fn combine(&self, with: Vec<T>) -> Vec<T> {
+        let mut extended_vec = vec![self.clone()];
+        extended_vec.extend(with);
+        return extended_vec;
+    }
+}
+
+impl<T> Combinable<Option<Vec<T>>, Vec<T>> for T
+where
+    T: Clone,
+{
+    fn combine(&self, with: Option<Vec<T>>) -> Vec<T> {
+        let mut extended_vec = vec![self.clone()];
+        if with.is_some() {
+            extended_vec.extend(with.unwrap());
+        }
+
+        return extended_vec;
     }
 }
 
@@ -117,6 +151,21 @@ where
 {
     fn parse(&self, pos: i32, input: &'a str) -> ParseResult<'a, T> {
         self(pos, input)
+    }
+}
+
+trait ParserGenerator<'a, T> {
+    fn gen_parser(&self) -> ParserB<'a, T>;
+}
+
+/// Allow any parser function closure to be treated as a [`Parser`].
+impl<'a, C, T, O> ParserGenerator<'a, T> for C
+where
+    C: Fn() -> O,
+    O: Parser<'a, T>,
+{
+    fn gen_parser(&self) -> ParserB<'a, T> {
+        ParserB::new(self())
     }
 }
 
@@ -149,7 +198,8 @@ pub(crate) fn chain<'a, L, R, LT, RT, O>(left: L, right: R) -> ParserB<'a, O>
 where
     L: Parser<'a, LT> + 'a,
     R: Parser<'a, RT> + 'a,
-    LT: Combinable<RT, O>,
+    LT: Combinable<RT, O> + 'a,
+    RT: 'a,
 {
     ParserB::new(move |pos: i32, input: &'a str| {
         left.parse(pos, input).and_then(|(remainder, left_parsed)| {
@@ -160,12 +210,78 @@ where
     })
 }
 
+/// Creates a new [`Parser`] which chains together two parsers using the provided `combinator`
+/// function to combine the two outputs.
+///
+/// Parses input with the `left` [`Parser`], then feeds the output into the `right` [`Parser`].
+/// Finally, it combines the two `token`s with the `combinator` function and returns a single [`Parsed`].
+pub(crate) fn fmap_chain<'a, L, R, LT: 'a, RT: 'a, O, F>(
+    left: L,
+    right: R,
+    combinator: F,
+) -> ParserB<'a, O>
+where
+    L: Parser<'a, LT> + 'a,
+    R: Parser<'a, RT> + 'a,
+    F: Fn(LT, RT) -> O + 'a,
+{
+    ParserB::new(move |pos: i32, input: &'a str| {
+        left.parse(pos, input).and_then(|(remainder, left_parsed)| {
+            right
+                .parse(left_parsed.end_pos, remainder)
+                .map(|(remainder, right_parsed)| {
+                    (
+                        remainder,
+                        Parsed {
+                            start_pos: left_parsed.start_pos,
+                            end_pos: right_parsed.end_pos,
+                            token: combinator(left_parsed.token, right_parsed.token),
+                        },
+                    )
+                })
+        })
+    })
+}
+
+/// Creates a new [`Parser<'a, Option<T>>`] out of a [`Parser<'a, T>`] where [`Option::None`] is
+/// returned when nothing is matched rather than failing.
+///
+/// All other failures will still be returned as an error.
+pub(crate) fn optional<'a, T: 'a, P>(parser: P) -> ParserB<'a, Option<T>>
+where
+    P: Parser<'a, T>,
+{
+    ParserB::new(
+        move |pos: i32, input: &'a str| match parser.parse(pos, input) {
+            Ok((remainder, parsed)) => Ok((
+                remainder,
+                Parsed {
+                    start_pos: parsed.start_pos,
+                    end_pos: parsed.end_pos,
+                    token: Some(parsed.token),
+                },
+            )),
+
+            Err(ParseError::NotMatched) => Ok((
+                input,
+                Parsed {
+                    start_pos: pos,
+                    end_pos: pos,
+                    token: None,
+                },
+            )),
+
+            Err(e) => Err(e),
+        },
+    )
+}
+
 /// Creates a new [`Parser`] which chains together two parsers but ignores the second (right)
 /// [`Parser`]'s token output.
 ///
 /// Parses input with the `left_p` [`Parser`], then feeds the output into the `right_p` [`Parser`].
 /// Finally, it ignores the right [`Parser`]'s token and returns the left's.
-pub(crate) fn left<'a, L, R, LT, RT>(left_p: L, right_p: R) -> ParserB<'a, LT>
+pub(crate) fn left<'a, L, R, LT: 'a, RT: 'a>(left_p: L, right_p: R) -> ParserB<'a, LT>
 where
     L: Parser<'a, LT> + 'a,
     R: Parser<'a, RT> + 'a,
@@ -195,7 +311,7 @@ where
 ///
 /// Parses input with the `left` [`Parser`], then feeds the output into the `right` [`Parser`].
 /// Finally, it ignores the left [`Parser`]'s token and returns the right's.
-pub(crate) fn right<'a, L, R, LT, RT>(left_p: L, right_p: R) -> ParserB<'a, RT>
+pub(crate) fn right<'a, L, R, LT: 'a, RT: 'a>(left_p: L, right_p: R) -> ParserB<'a, RT>
 where
     L: Parser<'a, LT> + 'a,
     R: Parser<'a, RT> + 'a,
@@ -225,7 +341,11 @@ where
 ///
 /// Parses input with the `left_p` [`Parser`], then feeds the output into the `right_p` [`Parser`].
 /// Finally, it ignores the left and right [`Parser`]'s token and returns the middle's.
-pub(crate) fn middle<'a, L, M, R, LT, MT, RT>(left_p: L, middle_p: M, right_p: R) -> ParserB<'a, MT>
+pub(crate) fn middle<'a, L, M, R, LT: 'a, MT: 'a, RT: 'a>(
+    left_p: L,
+    middle_p: M,
+    right_p: R,
+) -> ParserB<'a, MT>
 where
     L: Parser<'a, LT> + 'a,
     M: Parser<'a, MT> + 'a,
@@ -233,6 +353,78 @@ where
     MT: 'a,
 {
     right(left_p, left(middle_p, right_p))
+}
+
+/// Creates a new [`Parser`] which runs the provided `parser` until it fails, returning
+/// the result as a [`Vec<T>`].
+///
+/// If no tokens are matched, this parser will return an empty list.
+/// If a parser fails with an error other than [`ParseError::NotMatched`],
+/// this parser will fail and return that error.
+pub(crate) fn many<'a, P, T>(parser: P) -> ParserB<'a, Vec<T>>
+where
+    P: Parser<'a, T> + 'a,
+{
+    ParserB::new(move |pos: i32, input: &'a str| {
+        let mut tokens: Vec<T> = Vec::new();
+        let mut end_pos = pos;
+        let mut remainder = input;
+
+        loop {
+            match parser.parse(end_pos, remainder) {
+                Ok((new_remainder, parsed)) => {
+                    remainder = new_remainder;
+                    end_pos = parsed.end_pos;
+                    tokens.push(parsed.token);
+                }
+
+                Err(ParseError::NotMatched) => {
+                    break;
+                }
+
+                Err(e) => {
+                    // The parser found broken/malformed input, return error.
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok((
+            remainder,
+            Parsed {
+                start_pos: pos,
+                end_pos,
+                token: tokens,
+            },
+        ))
+    })
+}
+
+/// Creates a new [`Parser`] which runs the provided `parser` until it fails, returning
+/// the result as a [`Vec<T>`]. Must match at least one token.
+///
+/// If no tokens are matched, this parser will return a [`ParseError:NotMatched`] error.
+/// If a parser fails with an error other than [`ParseError::NotMatched`],
+/// this parser will fail and return that error.
+pub(crate) fn one_to_many<'a, P, T>(parser: P) -> ParserB<'a, Vec<T>>
+where
+    P: Parser<'a, T> + 'a,
+    T: 'a,
+{
+    let p = many(parser);
+
+    ParserB::new(move |pos: i32, input: &'a str| match p.parse(pos, input) {
+        Ok((remainder, parsed)) => {
+            // Return NotMatched if no tokens were matched.
+            if parsed.token.is_empty() {
+                Err(ParseError::NotMatched)
+            } else {
+                Ok((remainder, parsed))
+            }
+        }
+
+        res => res,
+    })
 }
 
 /// Creates a [`ParserB<'a, char>`] which parses the given char, returning it
@@ -298,6 +490,8 @@ pub(crate) fn take_until_char_parser<'a>(terminator: char) -> ParserB<'a, String
 /// Creates a [`ParserB<'a, String>`] which takes characters until it reaches one that is not
 /// in the `allowed_chars` array.
 pub(crate) fn take_while_chars_parser<'a>(allowed_chars: &'a [char]) -> ParserB<'a, String> {
+    let allowed_chars = allowed_chars.clone();
+
     ParserB::new(move |pos: i32, input: &'a str| {
         let token = input
             .to_string()
@@ -318,6 +512,25 @@ pub(crate) fn take_while_chars_parser<'a>(allowed_chars: &'a [char]) -> ParserB<
             ))
         }
     })
+}
+
+/// Creates a [`Parser`] which parses lists of `item`s, separated by `delimiter`s.
+///
+/// If no items are found, this [`Parser`] will return an empty [`Vec<T>`].
+/// Requires [`Fn() -> ParserB<'a, T>`] generators as they are used multiple times.
+pub(crate) fn delimited_list<'a, P, T: 'a, D, DT: 'a>(item: P, delimiter: D) -> ParserB<'a, Vec<T>>
+where
+    P: Fn() -> ParserB<'a, T> + 'a,
+    D: Fn() -> ParserB<'a, DT> + 'a,
+    T: Clone,
+{
+    fmap(
+        optional(chain(
+            item(),
+            optional(many(fmap_chain(delimiter(), item(), |_, i| i))),
+        )),
+        |t| t.unwrap_or_else(|| Vec::new()),
+    )
 }
 
 #[cfg(test)]
@@ -423,5 +636,56 @@ mod tests {
             "Variable name parser produced incorrect remainder for input `helloWorld: `.\n\tExpected: `: `\n\tGot: `{}`",
             remainder
         );
+    }
+
+    #[test]
+    fn test_array_parser() {
+        let valid_input = r#"["h", "hello", "worlddd"]"#;
+        let valid_output = vec!["h", "hello", "worlddd"];
+
+        let invalid_input = r#"["hello" "world",, "goodbye", "aaaa"]"#;
+
+        let string_literal_p = || {
+            middle(
+                char_parser('"'),
+                take_until_char_parser('"'),
+                char_parser('"'),
+            )
+        };
+
+        let ws_chars = vec![' ', '\t'];
+        let ws = || optional(take_while_chars_parser(&ws_chars));
+
+        let str_element_p = || middle(ws(), string_literal_p(), ws());
+
+        let delimiter = || middle(ws(), char_parser(','), ws());
+
+        let p = middle(
+            fmap_chain(char_parser('['), ws(), |_, _| ()),
+            delimited_list(str_element_p, delimiter),
+            fmap_chain(ws(), char_parser(']'), |_, _| ()),
+        );
+
+        let (remainder, parsed) = p.parse(0, valid_input).expect(&format!(
+            "Array parser should successfully parse input `{}`",
+            valid_input
+        ));
+
+        assert_eq!(
+            parsed.token, valid_output,
+            "Array parser failed to parse `{}`.\n\tExpected: `{:?}`\n\tGot: `{:?}`",
+            valid_input, valid_output, parsed.token,
+        );
+
+        assert_eq!(
+            remainder, "",
+            "Array parser produced incorrect remainder for input `{}`.\n\tExpected: `{:?}`\n\tGot: `{:?}`",
+            valid_input, "", remainder,
+        );
+
+        p.parse(0, invalid_input).expect_err(&format!(
+            "Array parser should not successfully parse input `{}`",
+            invalid_input
+        ));
     }
 }
