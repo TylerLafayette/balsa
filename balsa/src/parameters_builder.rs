@@ -4,7 +4,7 @@ use crate::types::BalsaValue;
 
 /// A struct used for generating a hashmap of parameters using
 /// the builder pattern.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BalsaParameters {
     parameters: HashMap<String, BalsaValue>,
 }

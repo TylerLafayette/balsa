@@ -83,7 +83,7 @@ impl Combinable<char, String> for String {
     /// Combines two chars into a String.
     fn combine(&self, with: char) -> String {
         let mut s = String::new();
-        s.push_str(&self);
+        s.push_str(self);
         s.push(with);
         s
     }
@@ -239,7 +239,7 @@ where
 /// as a token.
 pub(crate) fn char_parser<'a>(value: char) -> ParserB<'a, char> {
     ParserB::new(move |pos: i32, input: &'a str| {
-        if input.chars().nth(0) == Some(value) {
+        if input.starts_with(value) {
             let s = String::from(value);
 
             Ok((
@@ -260,7 +260,7 @@ pub(crate) fn char_parser<'a>(value: char) -> ParserB<'a, char> {
 /// as a token.
 pub(crate) fn string_parser<'a>(value: impl Into<String>) -> ParserB<'a, String> {
     let str_ = value.into();
-    if str_.len() == 0 {
+    if str_.is_empty() {
         unimplemented!("should return parser that always errors")
     }
 
@@ -280,7 +280,7 @@ pub(crate) fn take_until_char_parser<'a>(terminator: char) -> ParserB<'a, String
             .take_while(|x| *x != terminator)
             .collect::<String>();
 
-        if token.len() == 0 {
+        if token.is_empty() {
             Err(ParseError::NotMatched)
         } else {
             Ok((
@@ -305,7 +305,7 @@ pub(crate) fn take_while_chars_parser<'a>(allowed_chars: &'a [char]) -> ParserB<
             .take_while(|x| allowed_chars.contains(x))
             .collect::<String>();
 
-        if token.len() == 0 {
+        if token.is_empty() {
             Err(ParseError::NotMatched)
         } else {
             Ok((

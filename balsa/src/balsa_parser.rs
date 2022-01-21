@@ -1,4 +1,4 @@
-use crate::parser::{char_parser, fmap, string_parser, ParserB};
+use crate::parser::{fmap, string_parser, ParserB};
 use crate::types::BalsaType;
 
 struct BalsaDeclaration {
