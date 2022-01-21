@@ -47,7 +47,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: fmt
-          args: --all -- --check --manifest-path balsa/Cargo.toml
+          args: --manifest-path balsa/Cargo.toml --all -- --check
 
   clippy:
     name: cargo clippy
