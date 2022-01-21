@@ -490,7 +490,7 @@ pub(crate) fn take_until_char_parser<'a>(terminator: char) -> ParserB<'a, String
 
 /// Creates a [`ParserB<'a, String>`] which takes characters until it reaches one that is not
 /// in the `allowed_chars` array.
-pub(crate) fn take_while_chars_parser<'a>(allowed_chars: &'a [char]) -> ParserB<'a, String> {
+pub(crate) fn take_while_chars_parser<'a>(allowed_chars: Vec<char>) -> ParserB<'a, String> {
     ParserB::new(move |pos: i32, input: &'a str| {
         let token = input
             .to_string()
@@ -631,7 +631,7 @@ mod tests {
             .chars()
             .collect::<Vec<char>>();
 
-        let p = take_while_chars_parser(&allowed_chars);
+        let p = take_while_chars_parser(allowed_chars.clone());
 
         let (remainder, parsed) = p
             .parse(0, "helloWorld: ")
@@ -668,7 +668,7 @@ mod tests {
         };
 
         let ws_chars = vec![' ', '\t'];
-        let ws = || optional(take_while_chars_parser(&ws_chars));
+        let ws = || optional(take_while_chars_parser(ws_chars.clone()));
 
         let str_element_p = || middle(ws(), string_literal_p(), ws());
 
@@ -710,10 +710,10 @@ mod tests {
                 .chars()
                 .collect::<Vec<char>>();
 
-        let variable_name_p = || take_while_chars_parser(&allowed_variable_chars);
+        let variable_name_p = || take_while_chars_parser(allowed_variable_chars.clone());
 
         let ws_chars = vec![' ', '\t'];
-        let ws = || optional(take_while_chars_parser(&ws_chars));
+        let ws = || optional(take_while_chars_parser(ws_chars.clone()));
 
         let string_literal_p = || {
             middle(
