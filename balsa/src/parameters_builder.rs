@@ -10,6 +10,7 @@ pub struct BalsaParameters {
 }
 
 impl BalsaParameters {
+    /// Creates a new empty parameter list.
     pub fn new() -> Self {
         Self {
             parameters: HashMap::new(),
@@ -55,7 +56,8 @@ impl BalsaParameters {
 /// of parameters for a Balsa template.
 ///
 /// # Example
-/// ```rust
+/// ```rust,no_run
+/// # use balsa::*;
 /// struct TemplateParams {
 ///     header_text: String,
 ///     red: String,

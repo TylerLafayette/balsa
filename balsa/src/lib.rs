@@ -41,12 +41,15 @@
     missing_docs,
     missing_debug_implementations,
     unreachable_pub,
-    broken_intra_doc_links
+    rustdoc::broken_intra_doc_links
 )]
-mod types;
+pub(crate) mod types;
+
+pub(crate) mod balsa_parser;
+pub(crate) mod parser;
 
 mod parameters_builder;
-pub use parameters_builder::AsParameters;
+pub use parameters_builder::{AsParameters, BalsaParameters};
 
 // use std::path::Path;
 
