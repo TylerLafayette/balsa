@@ -55,23 +55,6 @@ where
     }
 }
 
-// /// This trait provides the `fmap` function which lets you turn
-// /// a functor of one type into a functor of another.
-// trait Functor<A, B, C> {
-//     fn fmap<F>(&self, function: F) -> C
-//     where
-//         F: Fn(A) -> B;
-// }
-//
-// /// This trait provides some methods used for an applicative
-// /// functor.
-// trait Applicative {
-//     fn or(&self, alternative: Self) -> Self;
-//     fn and(&self, combine_with: Self) -> Self;
-//     fn left(&self, right: Self) -> Self;
-//     fn right(&self, right: Self) -> Self;
-// }
-
 /// This trait allows two types to be combined into one.
 pub(crate) trait Combinable<T, O> {
     /// Combines two types into type `T`.
@@ -177,16 +160,28 @@ where
     P: Parser<'a, T> + 'a,
     F: Fn(T) -> O + 'a,
 {
+    fmap_result(parser, |x| Ok(function(x)))
+}
+
+/// Maps a [`Parser<'a, T>`] to a [`Parser<'a, O>`] using the provided
+/// function `F` which can fail.
+pub(crate) fn fmap_result<'a, P, T, O, F>(parser: P, function: F) -> ParserB<'a, O>
+where
+    P: Parser<'a, T> + 'a,
+    F: Fn(T) -> Result<O, ParseError> + 'a,
+{
     ParserB::new(move |pos: i32, input: &'a str| {
-        parser.parse(pos, input).map(|(remainder, output)| {
-            (
-                remainder,
-                Parsed {
-                    start_pos: output.start_pos,
-                    end_pos: output.end_pos,
-                    token: function(output.token),
-                },
-            )
+        parser.parse(pos, input).and_then(|(remainder, output)| {
+            function(output.token).map(|token| {
+                (
+                    remainder,
+                    Parsed {
+                        start_pos: output.start_pos,
+                        end_pos: output.end_pos,
+                        token,
+                    },
+                )
+            })
         })
     })
 }
@@ -238,19 +233,39 @@ where
     R: Parser<'a, RT> + 'a,
     F: Fn(LT, RT) -> O + 'a,
 {
+    fmap_result_chain(left, right, |x, y| Ok(combinator(x, y)))
+}
+
+/// Creates a new [`Parser`] which chains together two parsers using the provided `combinator`
+/// function to combine the two outputs into a [`Result<O, ParseError>`].
+///
+/// Parses input with the `left` [`Parser`], then feeds the output into the `right` [`Parser`].
+/// Finally, it combines the two `token`s with the `combinator` function and returns a single [`Parsed`].
+pub(crate) fn fmap_result_chain<'a, L, R, LT: 'a, RT: 'a, O, F>(
+    left: L,
+    right: R,
+    combinator: F,
+) -> ParserB<'a, O>
+where
+    L: Parser<'a, LT> + 'a,
+    R: Parser<'a, RT> + 'a,
+    F: Fn(LT, RT) -> Result<O, ParseError> + 'a,
+{
     ParserB::new(move |pos: i32, input: &'a str| {
         left.parse(pos, input).and_then(|(remainder, left_parsed)| {
             right
                 .parse(left_parsed.end_pos, remainder)
-                .map(|(remainder, right_parsed)| {
-                    (
-                        remainder,
-                        Parsed {
-                            start_pos: left_parsed.start_pos,
-                            end_pos: right_parsed.end_pos,
-                            token: combinator(left_parsed.token, right_parsed.token),
-                        },
-                    )
+                .and_then(|(remainder, right_parsed)| {
+                    combinator(left_parsed.token, right_parsed.token).map(|token| {
+                        (
+                            remainder,
+                            Parsed {
+                                start_pos: left_parsed.start_pos,
+                                end_pos: right_parsed.end_pos,
+                                token,
+                            },
+                        )
+                    })
                 })
         })
     })
