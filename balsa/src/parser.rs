@@ -1,9 +1,9 @@
 /// Represents a parsed token.
 #[derive(Debug, PartialEq)]
 pub(crate) struct Parsed<T> {
-    start_pos: i32,
-    end_pos: i32,
-    token: T,
+    pub(crate) start_pos: i32,
+    pub(crate) end_pos: i32,
+    pub(crate) token: T,
 }
 
 /// Represents a parsing failure.
@@ -27,7 +27,7 @@ pub(crate) struct ParserB<'a, T: 'a> {
 }
 
 impl<'a, T> ParserB<'a, T> {
-    fn new<P>(parser: P) -> ParserB<'a, T>
+    pub(crate) fn new<P>(parser: P) -> ParserB<'a, T>
     where
         P: Parser<'a, T>,
     {
@@ -208,6 +208,18 @@ where
                 .parse(left_parsed.end_pos, remainder)
                 .map(|(remainder, right_parsed)| (remainder, left_parsed.combine(right_parsed)))
         })
+    })
+}
+
+/// Creates a new [`Parser`] which first tries the `left` [`Parser`], returning its output on
+/// success and returning the output of the `right` [`Parser`] if `left` fails.
+pub(crate) fn or<'a, L, R, T: 'a>(left: L, right: R) -> ParserB<'a, T>
+where
+    L: Parser<'a, T> + 'a,
+    R: Parser<'a, T> + 'a,
+{
+    ParserB::new(move |pos: i32, input: &'a str| {
+        left.parse(pos, input).or_else(|_| right.parse(pos, input))
     })
 }
 
