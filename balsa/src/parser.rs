@@ -155,17 +155,17 @@ where
 
 /// Maps a [`Parser<'a, T>`] to a [`Parser<'a, O>`] using the provided
 /// function `F`.
-pub(crate) fn fmap<'a, P, T, O, F>(parser: P, function: F) -> ParserB<'a, O>
+pub(crate) fn fmap<'a, P, T: 'a, O: 'a, F>(parser: P, function: F) -> ParserB<'a, O>
 where
     P: Parser<'a, T> + 'a,
     F: Fn(T) -> O + 'a,
 {
-    fmap_result(parser, |x| Ok(function(x)))
+    fmap_result(parser, move |x| Ok(function(x)))
 }
 
 /// Maps a [`Parser<'a, T>`] to a [`Parser<'a, O>`] using the provided
 /// function `F` which can fail.
-pub(crate) fn fmap_result<'a, P, T, O, F>(parser: P, function: F) -> ParserB<'a, O>
+pub(crate) fn fmap_result<'a, P, T: 'a, O: 'a, F>(parser: P, function: F) -> ParserB<'a, O>
 where
     P: Parser<'a, T> + 'a,
     F: Fn(T) -> Result<O, ParseError> + 'a,
@@ -223,7 +223,7 @@ where
 ///
 /// Parses input with the `left` [`Parser`], then feeds the output into the `right` [`Parser`].
 /// Finally, it combines the two `token`s with the `combinator` function and returns a single [`Parsed`].
-pub(crate) fn fmap_chain<'a, L, R, LT: 'a, RT: 'a, O, F>(
+pub(crate) fn fmap_chain<'a, L, R, LT: 'a, RT: 'a, O: 'a, F>(
     left: L,
     right: R,
     combinator: F,
@@ -233,7 +233,7 @@ where
     R: Parser<'a, RT> + 'a,
     F: Fn(LT, RT) -> O + 'a,
 {
-    fmap_result_chain(left, right, |x, y| Ok(combinator(x, y)))
+    fmap_result_chain(left, right, move |x, y| Ok(combinator(x, y)))
 }
 
 /// Creates a new [`Parser`] which chains together two parsers using the provided `combinator`
@@ -241,7 +241,7 @@ where
 ///
 /// Parses input with the `left` [`Parser`], then feeds the output into the `right` [`Parser`].
 /// Finally, it combines the two `token`s with the `combinator` function and returns a single [`Parsed`].
-pub(crate) fn fmap_result_chain<'a, L, R, LT: 'a, RT: 'a, O, F>(
+pub(crate) fn fmap_result_chain<'a, L, R, LT: 'a, RT: 'a, O: 'a, F>(
     left: L,
     right: R,
     combinator: F,
