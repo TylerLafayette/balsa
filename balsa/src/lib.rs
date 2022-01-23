@@ -31,21 +31,39 @@
 //!
 //!     let output_html =
 //!         template
-//!             .compile(&TemplateStruct {
+//!             .render_html_string(&TemplateStruct {
 //!                 header_text: "Hello world!",
 //!                 current_year: 2022,
 //!             });
 //! }
 //! ```
+
 #![deny(
     missing_docs,
     missing_debug_implementations,
     unreachable_pub,
     rustdoc::broken_intra_doc_links
 )]
-pub(crate) mod types;
 
+/// Parser for Balsa templates.
 pub(crate) mod balsa_parser;
+/// Type casting for Balsa types.
+pub(crate) mod balsa_type_cast;
+/// Types supported in Balsa templates.
+pub(crate) mod balsa_types;
+/// Error types for Balsa compilation.
+pub mod errors;
+pub use balsa_types::{BalsaType, BalsaValue};
+
+/// Internal type converters.
+pub(crate) mod converters;
+/// Internal types for the compiler, etc.
+pub(crate) mod types;
+/// Validators for color formats etc.
+pub(crate) mod validators;
+pub use types::BalsaResult;
+
+/// Parser combinators
 pub(crate) mod parser;
 
 mod parameters_builder;

@@ -1,3 +1,39 @@
+//! A simple, not very generic parser combinator module which allows for easy construction of
+//! larger parsers from the provided building blocks.
+//!
+//! # Example
+//! ## Array parser
+//! ```rust,ignore
+//! let valid_input = r#"["h", "hello", "worlddd"]"#;
+//! let valid_output = vec!["h", "hello", "worlddd"];
+//!
+//! let string_literal_p = || {
+//!     middle(
+//!         char_parser('"'),
+//!         take_until_char_parser('"'),
+//!         char_parser('"'),
+//!     )
+//! };
+//!
+//! let ws_chars = vec![' ', '\t'];
+//! let ws = || optional(take_while_chars_parser(ws_chars.clone()));
+//!
+//! let str_element_p = || middle(ws(), string_literal_p(), ws());
+//!
+//! let delimiter = || middle(ws(), char_parser(','), ws());
+//!
+//! let p = middle(
+//!     fmap_chain(char_parser('['), ws(), |_, _| ()),
+//!     delimited_list(str_element_p, delimiter),
+//!     fmap_chain(ws(), char_parser(']'), |_, _| ()),
+//! );
+//!
+//! let (_, parsed) = p.parse(0, valid_input).expect(&format!(
+//!     "Array parser should successfully parse input `{}`",
+//!     valid_input
+//! ));
+//! ```
+
 /// Represents a parsed token.
 #[derive(Debug, PartialEq)]
 pub(crate) struct Parsed<T> {
@@ -6,6 +42,7 @@ pub(crate) struct Parsed<T> {
     pub(crate) token: T,
 }
 
+// TODO: generic error type
 /// Represents a parsing failure.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum ParseError {

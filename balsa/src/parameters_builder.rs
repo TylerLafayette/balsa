@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::types::BalsaValue;
+use crate::balsa_types::BalsaValue;
 
 /// A struct used for generating a hashmap of parameters using
 /// the builder pattern.
