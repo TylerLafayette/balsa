@@ -33,7 +33,9 @@ where
 
 /// Represents an error occurred while attempting to parse and tokenize the raw template.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ParseFail {}
+pub enum ParseFail {
+    Generic,
+}
 
 /// Represents an invalid or failed attempt to cast [`BalsaValue`] `value` from [`BalsaType`] `from` to [`BalsaType`] `to`.
 #[derive(Debug, Clone, PartialEq)]

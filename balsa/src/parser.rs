@@ -34,6 +34,12 @@
 //! ));
 //! ```
 
+/// Context for a parsed token.
+pub(crate) struct ParseContext {
+    pub(crate) start_pos: i32,
+    pub(crate) end_pos: i32,
+}
+
 /// Represents a parsed token.
 #[derive(Debug, PartialEq)]
 pub(crate) struct Parsed<T> {
@@ -195,9 +201,14 @@ where
 pub(crate) fn fmap<'a, P, T: 'a, O: 'a, F>(parser: P, function: F) -> ParserB<'a, O>
 where
     P: Parser<'a, T> + 'a,
-    F: Fn(T) -> O + 'a,
+    F: Fn(T, ParseContext) -> O + 'a,
 {
-    fmap_result(parser, move |x| Ok(function(x)))
+    fmap_result(parser, move |x, ctx| Ok(function(x, ctx)))
+}
+
+/// Converts a [`Parsed`] to a [`ParseContext`].
+fn make_context(start_pos: i32, end_pos: i32) -> ParseContext {
+    ParseContext { start_pos, end_pos }
 }
 
 /// Maps a [`Parser<'a, T>`] to a [`Parser<'a, O>`] using the provided
@@ -205,11 +216,11 @@ where
 pub(crate) fn fmap_result<'a, P, T: 'a, O: 'a, F>(parser: P, function: F) -> ParserB<'a, O>
 where
     P: Parser<'a, T> + 'a,
-    F: Fn(T) -> Result<O, ParseError> + 'a,
+    F: Fn(T, ParseContext) -> Result<O, ParseError> + 'a,
 {
     ParserB::new(move |pos: i32, input: &'a str| {
         parser.parse(pos, input).and_then(|(remainder, output)| {
-            function(output.token).map(|token| {
+            function(output.token, make_context(output.start_pos, output.end_pos)).map(|token| {
                 (
                     remainder,
                     Parsed {
@@ -268,7 +279,7 @@ pub(crate) fn fmap_chain<'a, L, R, LT: 'a, RT: 'a, O: 'a, F>(
 where
     L: Parser<'a, LT> + 'a,
     R: Parser<'a, RT> + 'a,
-    F: Fn(LT, RT) -> O + 'a,
+    F: Fn((LT, ParseContext), (RT, ParseContext)) -> O + 'a,
 {
     fmap_result_chain(left, right, move |x, y| Ok(combinator(x, y)))
 }
@@ -286,14 +297,24 @@ pub(crate) fn fmap_result_chain<'a, L, R, LT: 'a, RT: 'a, O: 'a, F>(
 where
     L: Parser<'a, LT> + 'a,
     R: Parser<'a, RT> + 'a,
-    F: Fn(LT, RT) -> Result<O, ParseError> + 'a,
+    F: Fn((LT, ParseContext), (RT, ParseContext)) -> Result<O, ParseError> + 'a,
 {
     ParserB::new(move |pos: i32, input: &'a str| {
         left.parse(pos, input).and_then(|(remainder, left_parsed)| {
             right
                 .parse(left_parsed.end_pos, remainder)
                 .and_then(|(remainder, right_parsed)| {
-                    combinator(left_parsed.token, right_parsed.token).map(|token| {
+                    combinator(
+                        (
+                            left_parsed.token,
+                            make_context(left_parsed.start_pos, left_parsed.end_pos),
+                        ),
+                        (
+                            right_parsed.token,
+                            make_context(right_parsed.start_pos, right_parsed.end_pos),
+                        ),
+                    )
+                    .map(|token| {
                         (
                             remainder,
                             Parsed {
@@ -522,7 +543,9 @@ pub(crate) fn string_parser<'a>(value: impl Into<String>) -> ParserB<'a, String>
     }
 
     let mut chars = str_.chars();
-    let first = fmap(char_parser(chars.next().unwrap()), String::from);
+    let first = fmap(char_parser(chars.next().unwrap()), |token, _| {
+        String::from(token)
+    });
 
     chars.fold(first, |acc, p| chain(acc, char_parser(p)))
 }
@@ -590,9 +613,9 @@ where
     fmap(
         optional(chain(
             item(),
-            optional(many(fmap_chain(delimiter(), item(), |_, i| i))),
+            optional(many(fmap_chain(delimiter(), item(), |_, (i, _)| i))),
         )),
-        |t| t.unwrap_or_else(Vec::new),
+        |t, _| t.unwrap_or_else(Vec::new),
     )
 }
 
@@ -608,7 +631,7 @@ where
     D: Parser<'a, DT> + 'a,
     V: Parser<'a, VT> + 'a,
 {
-    fmap_chain(key, right(delimiter, value), |k, v| (k, v))
+    fmap_chain(key, right(delimiter, value), |(k, _), (v, _)| (k, v))
 }
 
 #[cfg(test)]
