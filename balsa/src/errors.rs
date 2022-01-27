@@ -34,6 +34,8 @@ where
 /// Represents an error occurred while attempting to parse and tokenize the raw template.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseFail {
+    /// Represents a generic parser fail.
+    // TODO: more descriptive variants
     Generic,
 }
 

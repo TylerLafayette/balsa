@@ -247,7 +247,7 @@ fn balsa_p<'a>() -> ParserB<'a, Vec<BalsaToken>> {
                 fmap(take_while_chars_parser(vec!['{']), |_, _| None),
             ),
         )),
-        |v, _| v.into_iter().filter_map(|b| b).collect(),
+        |v, _| v.into_iter().flatten().collect(),
     )
 }
 
