@@ -3,10 +3,11 @@ use std::collections::HashMap;
 use crate::balsa_types::{BalsaExpression, BalsaValue};
 use crate::converters::tuple_vec_to_map;
 use crate::parser::{
-    char_parser, delimited_list, fmap, fmap_chain, key_sep_value, middle, optional, or, right,
-    string_parser, take_until_char_parser, take_while_chars_parser, ParseError, Parsed, Parser,
-    ParserB,
+    char_parser, delimited_list, fmap, fmap_chain, fmap_result, key_sep_value, middle, optional,
+    or, right, string_parser, take_until_char_parser, take_while_chars_parser, ParseError, Parsed,
+    Parser, ParserB,
 };
+use crate::BalsaType;
 
 /// Represents a key-value set from a block.
 ///
@@ -15,7 +16,7 @@ type OptionsMap = HashMap<String, BalsaExpression>;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 struct Declaration {
-    name: String,
+    identifier: BalsaExpression,
     value: BalsaExpression,
 }
 
@@ -24,6 +25,9 @@ struct Declaration {
 struct ParameterBlockIntermediate {
     /// The name of the variable being referenced.
     variable_name: BalsaExpression,
+    /// The type of the variable expected.
+    variable_type: BalsaExpression,
+    /// A list of optional options.
     options: Option<OptionsMap>,
 }
 
@@ -39,13 +43,14 @@ const ALLOWED_VARIABLE_CHARACTERS: &str =
 const DIGITS: &str = "1234567890";
 const KEY_VALUE_DELIMETER: char = ':';
 const LIST_ELEMENT_DELIMETER: char = ',';
+const DECLARATION_DELIMITER: char = '=';
 
 fn parameter_open_bracket_p<'a>() -> ParserB<'a, ()> {
     fmap(string_parser("{{"), |_| ())
 }
 
 fn declaration_open_bracket_p<'a>() -> ParserB<'a, ()> {
-    fmap(string_parser("{{"), |_| ())
+    fmap(string_parser("{{@"), |_| ())
 }
 
 fn closing_bracket_p<'a>() -> ParserB<'a, ()> {
@@ -71,6 +76,10 @@ fn variable_name_p<'a>() -> ParserB<'a, String> {
     take_while_chars_parser(allowed_chars)
 }
 
+fn variable_with_type_p<'a>() -> ParserB<'a, (BalsaExpression, BalsaExpression)> {
+    key_sep_value(balsa_expr_p(), key_value_delimiter_p(), balsa_expr_p())
+}
+
 fn string_literal_p<'a>() -> ParserB<'a, BalsaValue> {
     fmap(
         middle(
@@ -86,23 +95,24 @@ fn int_literal_p<'a>() -> ParserB<'a, BalsaValue> {
     let digits = DIGITS.chars().collect::<Vec<char>>();
     let digit_p = take_while_chars_parser(digits);
 
-    // TODO: fmap_failable combinator in parser.rs
-    ParserB::new(move |pos: i32, input: &'a str| {
-        digit_p.parse(pos, input).and_then(|(remainder, parsed)| {
-            match parsed.token.parse::<i64>() {
-                Ok(val) => Ok((
-                    remainder,
-                    Parsed {
-                        start_pos: pos,
-                        end_pos: parsed.end_pos,
-                        token: BalsaValue::Integer(val),
-                    },
-                )),
-
-                Err(_) => Err(ParseError::MalformedInput(pos)),
-            }
-        })
+    fmap_result(digit_p, |token| match token.parse::<i64>() {
+        Ok(val) => Ok(BalsaValue::Integer(val)),
+        Err(_) => Err(ParseError::MalformedInput(0)),
     })
+}
+
+fn balsa_type_p<'a>() -> ParserB<'a, BalsaType> {
+    // TODO: or macro or similar shortcut for scalability
+    or(
+        fmap(string_parser("string"), |_| BalsaType::String),
+        or(
+            fmap(string_parser("color"), |_| BalsaType::Color),
+            or(
+                fmap(string_parser("int"), |_| BalsaType::Integer),
+                fmap(string_parser("float"), |_| BalsaType::Float),
+            ),
+        ),
+    )
 }
 
 fn balsa_value_p<'a>() -> ParserB<'a, BalsaValue> {
@@ -110,7 +120,13 @@ fn balsa_value_p<'a>() -> ParserB<'a, BalsaValue> {
 }
 
 fn balsa_expr_p<'a>() -> ParserB<'a, BalsaExpression> {
-    fmap(balsa_value_p(), BalsaExpression::Value)
+    or(
+        fmap(balsa_value_p(), |v| BalsaExpression::Value(v)),
+        or(
+            fmap(balsa_type_p(), |t| BalsaExpression::Type(t)),
+            fmap(variable_name_p(), |v| BalsaExpression::Identifier(v)),
+        ),
+    )
 }
 
 fn key_value_delimiter_p<'a>() -> ParserB<'a, ()> {
@@ -125,20 +141,52 @@ fn list_delimeter<'a>() -> ParserB<'a, ()> {
     fmap(ws_padded_p(char_parser(LIST_ELEMENT_DELIMETER)), |_| ())
 }
 
+fn declaration_delimiter_p<'a>() -> ParserB<'a, ()> {
+    fmap(ws_padded_p(char_parser(DECLARATION_DELIMITER)), |_| ())
+}
+
+fn declaration_p<'a>() -> ParserB<'a, (BalsaExpression, BalsaExpression)> {
+    fmap_chain(
+        balsa_expr_p(),
+        right(declaration_delimiter_p(), balsa_expr_p()),
+        |identifier, value| (identifier, value),
+    )
+}
+
+fn declaration_block_p<'a>() -> ParserB<'a, BalsaToken> {
+    middle(
+        declaration_open_bracket_p(),
+        fmap(
+            ws_padded_p(delimited_list(
+                || {
+                    fmap(declaration_p(), |(identifier, value)| Declaration {
+                        identifier,
+                        value,
+                    })
+                },
+                list_delimeter,
+            )),
+            BalsaToken::DeclarationBlock,
+        ),
+        closing_bracket_p(),
+    )
+}
+
 fn parameter_block_p<'a>() -> ParserB<'a, BalsaToken> {
     middle(
         parameter_open_bracket_p(),
         ws_padded_p(fmap_chain(
-            variable_name_p(),
+            variable_with_type_p(),
             optional(right(
                 list_delimeter(),
                 delimited_list(key_value_p, list_delimeter),
             )),
-            |variable_name, options_list| {
+            |(variable_name, variable_type), options_list| {
                 let options = options_list.map(tuple_vec_to_map);
 
                 BalsaToken::ParameterBlock(ParameterBlockIntermediate {
-                    variable_name: BalsaExpression::Variable(variable_name),
+                    variable_name,
+                    variable_type,
                     options,
                 })
             },
@@ -147,20 +195,28 @@ fn parameter_block_p<'a>() -> ParserB<'a, BalsaToken> {
     )
 }
 
+/// Parses any kind of block into a BalsaToken.
+fn block_p<'a>() -> ParserB<'a, BalsaToken> {
+    or(parameter_block_p(), declaration_block_p())
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::BalsaType;
+
     use super::*;
 
     #[test]
     fn test_parameter_block_p() {
-        let valid_input = r#"{{ helloWorld, defaultValue: "hello world" }}"#;
+        let valid_input = r#"{{ helloWorld: color, defaultValue: "hello world" }}"#;
         let mut valid_options = HashMap::new();
         valid_options.insert(
             "defaultValue".to_string(),
             BalsaExpression::Value(BalsaValue::String("hello world".to_string())),
         );
         let valid_output = BalsaToken::ParameterBlock(ParameterBlockIntermediate {
-            variable_name: BalsaExpression::Variable("helloWorld".to_string()),
+            variable_name: BalsaExpression::Identifier("helloWorld".to_string()),
+            variable_type: BalsaExpression::Type(BalsaType::Color),
             options: Some(valid_options),
         });
 
@@ -174,6 +230,31 @@ mod tests {
         assert!(
             PartialEq::eq(&parsed.token, &valid_output),
             "Parameter block parser failed to parse `{}`.\n\tExpected: `{:?}`\n\tGot: `{:?}`",
+            valid_input,
+            valid_output,
+            parsed.token
+        );
+    }
+
+    #[test]
+    fn test_declaration_block_p() {
+        let valid_input = r#"{{@ hello     = "world" }}"#;
+        let mut valid_declarations = Vec::new();
+        valid_declarations.push(Declaration {
+            identifier: BalsaExpression::Identifier("hello".to_string()),
+            value: BalsaExpression::Value(BalsaValue::String("world".to_string())),
+        });
+        let valid_output = BalsaToken::DeclarationBlock(valid_declarations);
+        let p = declaration_block_p();
+
+        let (_, parsed) = p.parse(0, valid_input).expect(&format!(
+            "Declaration block parser should successfully parse input `{}`",
+            valid_input
+        ));
+
+        assert!(
+            PartialEq::eq(&parsed.token, &valid_output),
+            "Declaration block parser failed to parse `{}`.\n\tExpected: `{:?}`\n\tGot: `{:?}`",
             valid_input,
             valid_output,
             parsed.token

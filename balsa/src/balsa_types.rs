@@ -1,12 +1,12 @@
 use std::fmt::Display;
 
-/// Represents a reference to a variable by name without any preceding characters like `$`.
-pub(crate) type BalsaVariableName = String;
+/// Represents a reference to a variable or key by name without any preceding characters like `$`.
+pub(crate) type BalsaIdentifier = String;
 
 /// Represents a typed value in a Balsa template.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub(crate) enum BalsaExpression {
-    Variable(BalsaVariableName),
+    Identifier(BalsaIdentifier),
     Type(BalsaType),
     Value(BalsaValue),
 }
