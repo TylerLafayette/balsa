@@ -1,7 +1,6 @@
-use std::fmt::Display;
-use std::string::ToString;
+use std::{fmt::Display, ops::Deref};
 
-use crate::balsa_types::{BalsaType, BalsaValue};
+use crate::balsa_types::{BalsaExpression, BalsaType, BalsaValue};
 
 /// Represents all Balsa errors.
 #[derive(Debug, Clone, PartialEq)]
@@ -14,9 +13,23 @@ pub enum BalsaError {
 #[derive(Debug, Clone, PartialEq)]
 pub enum BalsaCompileError {
     /// A failure occurred while trying to parse and tokenize the raw template.
-    TemplateParseFail(TemplateErrorContext<ParseFail>),
+    TemplateParseFail(TemplateErrorContext<TemplateParseFail>),
     /// A failure occurred while attempting to cast a value from one type to another.
     InvalidTypeCast(TemplateErrorContext<InvalidTypeCast>),
+    /// A provided type expression was malformed or didn't match a valid type.
+    InvalidTypeExpression(TemplateErrorContext<InvalidTypeExpression>),
+    /// The variant of the provided expression was invalid.
+    ///
+    /// e.g. Identifier passed instead of value
+    InvalidExpression(TemplateErrorContext<InvalidExpression>),
+    /// An invalid identifier was provided for a parameter block.
+    InvalidIdentifierForParameterBlock(TemplateErrorContext<InvalidIdentifierForParameterBlock>),
+    /// An invalid identifier was provided for a variable in a declaration block.
+    InvalidIdentifierForDeclarationBlock(
+        TemplateErrorContext<InvalidIdentifierForDeclarationBlock>,
+    ),
+    /// Unexpected parameter was provided to a parameter block.
+    InvalidParameter(TemplateErrorContext<InvalidParameter>),
 }
 
 /// Wraps an error and provides file context.
@@ -33,7 +46,7 @@ where
 
 /// Represents an error occurred while attempting to parse and tokenize the raw template.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ParseFail {
+pub enum TemplateParseFail {
     /// Represents a generic parser fail.
     // TODO: more descriptive variants
     Generic,
@@ -50,6 +63,43 @@ pub struct InvalidTypeCast {
     pub to: BalsaType,
 }
 
+/// Represents an type expression which does not match a valid type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InvalidTypeExpression {
+    /// The parsed type expression.
+    pub expression: BalsaExpression,
+}
+
+/// The variant of the provided expression was invalid.
+///
+/// e.g. Identifier passed instead of value
+#[derive(Debug, Clone, PartialEq)]
+pub struct InvalidExpression {
+    /// The parsed type expression.
+    expression: BalsaExpression,
+}
+
+/// Represents an invalid identifier provided in a parameter block.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InvalidIdentifierForParameterBlock {
+    /// The parsed type expression.
+    pub expression: BalsaExpression,
+}
+
+/// Represents an invalid identifier provided for a variable in a declaration block.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InvalidIdentifierForDeclarationBlock {
+    /// The parsed type expression.
+    pub expression: BalsaExpression,
+}
+
+/// Represents an invalid parameter provided in a block.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InvalidParameter {
+    /// The name of the invalid parameter.
+    pub parameter_name: String,
+}
+
 impl Display for BalsaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -61,9 +111,26 @@ impl Display for BalsaError {
 impl Display for BalsaCompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BalsaCompileError::TemplateParseFail(t) => t.fmt(f),
-            BalsaCompileError::InvalidTypeCast(t) => t.fmt(f),
+            Self::TemplateParseFail(e) => e.fmt(f),
+            Self::InvalidTypeCast(e) => e.fmt(f),
+            Self::InvalidTypeExpression(e) => e.fmt(f),
+            Self::InvalidExpression(e) => e.fmt(f),
+            Self::InvalidIdentifierForParameterBlock(e) => e.fmt(f),
+            Self::InvalidIdentifierForDeclarationBlock(e) => e.fmt(f),
+            Self::InvalidParameter(e) => e.fmt(f),
         }
+    }
+}
+
+// Allow [`TemplateErrorContext`]s to be deref'd to their wrapped error types.
+impl<T> Deref for TemplateErrorContext<T>
+where
+    T: Display,
+{
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.error
     }
 }
 
@@ -76,7 +143,7 @@ where
     }
 }
 
-impl Display for ParseFail {
+impl Display for TemplateParseFail {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "parser failed")
     }
@@ -89,5 +156,146 @@ impl Display for InvalidTypeCast {
             "failed to cast value `{}` of type `{}` to type `{}`",
             self.value, self.from, self.to
         )
+    }
+}
+
+impl Display for InvalidTypeExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid type expression `{}` does not match any known types",
+            self.expression
+        )
+    }
+}
+
+impl Display for InvalidExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "expression `{}` is an unexpected variant",
+            self.expression
+        )
+    }
+}
+
+impl Display for InvalidIdentifierForParameterBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid identifier `{}` provided in parameter block",
+            self.expression
+        )
+    }
+}
+
+impl Display for InvalidIdentifierForDeclarationBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid identifier `{}` provided in declaration block",
+            self.expression
+        )
+    }
+}
+
+impl Display for InvalidParameter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "invalid or unknown parameter `{}` provided",
+            self.parameter_name
+        )
+    }
+}
+
+// Error constructor functions.
+impl BalsaError {
+    /// Creates a [`BalsaError::CompileError`] with the provided [`BalsaCompileError`].
+    pub(crate) fn new_compile_error(error: BalsaCompileError) -> Self {
+        Self::CompileError(error)
+    }
+
+    /// Creates a new [`BalsaError::CompileError`] which wraps a [`CompileError::TemlateParseFail`]
+    /// which wraps a [`ParseFail::Generic`].
+    pub(crate) fn generic_template_parse_fail(pos: usize) -> Self {
+        Self::new_compile_error(BalsaCompileError::TemplateParseFail(
+            Self::template_context(pos, TemplateParseFail::Generic),
+        ))
+    }
+
+    /// Creates a new [`BalsaError::CompileError`] which wraps a [`CompileError::InvalidTypeCast`]
+    /// which wraps a [`InvalidTypeCast`] with the provided arguments.
+    pub(crate) fn invalid_type_cast(
+        pos: usize,
+        value: BalsaValue,
+        from_type: BalsaType,
+        to_type: BalsaType,
+    ) -> Self {
+        Self::new_compile_error(BalsaCompileError::InvalidTypeCast(Self::template_context(
+            pos,
+            InvalidTypeCast {
+                value,
+                from: from_type,
+                to: to_type,
+            },
+        )))
+    }
+
+    /// Creates a new [`BalsaError::CompileError`] which wraps a
+    /// [`CompileError::InvalidTypeExpression`] which wraps a [`InvalidTypeExpression`] with the
+    /// provided expression.
+    pub(crate) fn invalid_type_expression(pos: usize, expression: BalsaExpression) -> Self {
+        Self::new_compile_error(BalsaCompileError::InvalidTypeExpression(
+            Self::template_context(pos, InvalidTypeExpression { expression }),
+        ))
+    }
+
+    /// Creates a new [`BalsaError::CompileError`] which wraps a
+    /// [`CompileError::InvalidExpression`] which wraps a [`InvalidExpression`] with the
+    /// provided expression.
+    pub(crate) fn invalid_expression(pos: usize, expression: BalsaExpression) -> Self {
+        Self::new_compile_error(BalsaCompileError::InvalidExpression(
+            Self::template_context(pos, InvalidExpression { expression }),
+        ))
+    }
+
+    /// Creates a new [`BalsaError::CompileError`] which wraps a
+    /// [`CompileError::InvalidIdentifierForParameterBlock`] which wraps a
+    /// [`InvalidIdentifierForParameterBlock`] with the provided arguments.
+    pub(crate) fn invalid_identifier_in_parameter_block(
+        pos: usize,
+        expression: BalsaExpression,
+    ) -> Self {
+        Self::new_compile_error(BalsaCompileError::InvalidIdentifierForParameterBlock(
+            Self::template_context(pos, InvalidIdentifierForParameterBlock { expression }),
+        ))
+    }
+
+    /// Creates a new [`BalsaError::CompileError`] which wraps a
+    /// [`CompileError::InvalidIdentifierForDeclarationBlock`] which wraps a
+    /// [`InvalidIdentifierForDeclarationBlock`] with the provided arguments.
+    pub(crate) fn invalid_identifier_in_declaration_block(
+        pos: usize,
+        expression: BalsaExpression,
+    ) -> Self {
+        Self::new_compile_error(BalsaCompileError::InvalidIdentifierForDeclarationBlock(
+            Self::template_context(pos, InvalidIdentifierForDeclarationBlock { expression }),
+        ))
+    }
+
+    /// Creates a new [`BalsaError::CompileError`] which wraps a
+    /// [`CompileError::InvalidParameter`] which wraps a [`InvalidParameter`] with the provided
+    /// parameter name.
+    pub(crate) fn invalid_parameter(pos: usize, parameter_name: String) -> Self {
+        Self::new_compile_error(BalsaCompileError::InvalidParameter(Self::template_context(
+            pos,
+            InvalidParameter { parameter_name },
+        )))
+    }
+
+    /// Makes a [`TemplateErrorContext<T>`] with the provided `pos` and `error` of type `T`.
+    fn template_context<T: Display>(pos: usize, error: T) -> TemplateErrorContext<T> {
+        TemplateErrorContext { pos, error }
     }
 }

@@ -45,6 +45,8 @@
     rustdoc::broken_intra_doc_links
 )]
 
+/// Compiler for parsed Balsa templates.
+pub(crate) mod balsa_compiler;
 /// Parser for Balsa templates.
 pub(crate) mod balsa_parser;
 /// Type casting for Balsa types.
@@ -53,6 +55,8 @@ pub(crate) mod balsa_type_cast;
 pub(crate) mod balsa_types;
 /// Error types for Balsa compilation.
 pub mod errors;
+/// Name constants for parameters.
+pub(crate) mod parameter_names;
 pub use balsa_types::{BalsaType, BalsaValue};
 
 /// Internal type converters.

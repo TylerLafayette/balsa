@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use crate::balsa_types::{BalsaExpression, BalsaValue};
 use crate::converters::tuple_vec_to_map;
-use crate::errors::{BalsaCompileError, BalsaError, ParseFail, TemplateErrorContext};
+use crate::errors::{BalsaCompileError, BalsaError, TemplateErrorContext, TemplateParseFail};
 use crate::parser::{
     char_parser, delimited_list, fmap, fmap_chain, fmap_result, key_sep_value, many, middle,
     optional, or, right, string_parser, take_until_char_parser, take_while_chars_parser,
-    ParseError, Parsed, Parser, ParserB,
+    ParseError, Parser, ParserB,
 };
 use crate::BalsaType;
 
@@ -21,7 +21,7 @@ impl BalsaParser {
         p.parse(0, &input).map(|(_, t)| t.token).map_err(|_| {
             BalsaError::CompileError(BalsaCompileError::TemplateParseFail(TemplateErrorContext {
                 pos: 0, // TODO
-                error: ParseFail::Generic,
+                error: TemplateParseFail::Generic,
             }))
         })
     }
