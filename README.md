@@ -6,7 +6,7 @@ Balsa is a delightfully simple HTML template engine. It is designed to be used i
 
 ```html
 <h1>
-  {{ headerText, type: string, friendlyName: "Header text", defaultValue: "Hello
+  {{ headerText : string, friendlyName: "Header text", defaultValue: "Hello
   world!" }}
 </h1>
 ```
@@ -14,7 +14,7 @@ Balsa is a delightfully simple HTML template engine. It is designed to be used i
 Here, we define a new variable called `headerText`, which is a string with a default value of "Hello world!". We also gave it a friendly name, which can later be resolved and shown to a user in a control panel, etc. We can even define variables inside the template like so:
 
 ```html
-{{@ defaultHeader = "Hello world!" }}
+{{@ defaultHeader : string = "Hello world!" }}
 <!-- ... -->
 <h1>
   {{ headerText, type: string, friendlyName: "Header text", defaultValue:
