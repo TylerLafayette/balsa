@@ -17,7 +17,7 @@ Here, we define a new variable called `headerText`, which is a string with a def
 {{@ defaultHeader : string = "Hello world!" }}
 <!-- ... -->
 <h1>
-  {{ headerText, type: string, friendlyName: "Header text", defaultValue:
+  {{ headerText : string, friendlyName: "Header text", defaultValue:
   $defaultHeader }}
 </h1>
 <h2>The default header value is: {{ $defaultHeader }}</h2>
