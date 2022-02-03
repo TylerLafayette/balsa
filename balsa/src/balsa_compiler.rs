@@ -8,20 +8,20 @@ use crate::{
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct CompiledTemplate {
-    global_scope: Scope,
-    replacements: Vec<ReplacementInstruction>,
+    pub(crate) global_scope: Scope,
+    pub(crate) replacements: Vec<ReplacementInstruction>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub(crate) struct Scope {
-    variables: HashMap<String, BalsaValue>,
+    pub(crate) variables: HashMap<String, BalsaValue>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ReplacementInstruction {
-    start_pos: usize,
-    end_pos: usize,
-    replace_with: ReplaceWith,
+    pub(crate) start_pos: usize,
+    pub(crate) end_pos: usize,
+    pub(crate) replace_with: ReplaceWith,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,15 +32,15 @@ pub(crate) enum ReplaceWith {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ParameterDescription {
-    variable_name: String,
-    variable_type: BalsaType,
-    default_value: Option<BalsaValue>,
+    pub(crate) variable_name: String,
+    pub(crate) variable_type: BalsaType,
+    pub(crate) default_value: Option<BalsaValue>,
 }
 
 /// Struct which provides compiler methods.
 pub(crate) struct Compiler {
-    global_scope: Scope,
-    replacements: Vec<ReplacementInstruction>,
+    pub(crate) global_scope: Scope,
+    pub(crate) replacements: Vec<ReplacementInstruction>,
 }
 
 impl Compiler {

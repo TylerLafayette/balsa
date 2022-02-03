@@ -49,6 +49,8 @@
 pub(crate) mod balsa_compiler;
 /// Parser for Balsa templates.
 pub(crate) mod balsa_parser;
+/// Renderer for compiled Balsa templates.
+pub(crate) mod balsa_renderer;
 /// Type casting for Balsa types.
 pub(crate) mod balsa_type_cast;
 /// Types supported in Balsa templates.

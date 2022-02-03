@@ -1,12 +1,17 @@
 use std::{fmt::Display, ops::Deref};
 
-use crate::balsa_types::{BalsaExpression, BalsaType, BalsaValue};
+use crate::{
+    balsa_types::{BalsaExpression, BalsaType, BalsaValue},
+    Balsa,
+};
 
 /// Represents all Balsa errors.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BalsaError {
     /// Represents a failure that occurred during template compilation, before being rendered.
     CompileError(BalsaCompileError),
+    /// Represents a failure that occurred while rendering a template.
+    RenderError(BalsaRenderError),
 }
 
 /// Represents an error in compiling a file.
@@ -100,10 +105,40 @@ pub struct InvalidParameter {
     pub parameter_name: String,
 }
 
+/// Represents an error in compiling a file.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BalsaRenderError {
+    /// A parameter was expected and no default value was provided.
+    MissingParameter(MissingParameter),
+    /// A parameter's value could not be casted to the specified type.
+    InvalidParameterType(InvalidParameterType),
+}
+
+/// A parameter was expected and no default value was provided.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MissingParameter {
+    /// The name of the missing parameter.
+    pub parameter_name: String,
+}
+
+/// A parameter's value could not be casted to the specified type.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InvalidParameterType {
+    /// The name of the parameter.
+    pub parameter_name: String,
+    /// The value that the parameter was set to.
+    pub received_value: BalsaValue,
+    /// The type of the provided parameter value.
+    pub received_type: BalsaType,
+    /// The expected type for the parameter.
+    pub expected_type: BalsaType,
+}
+
 impl Display for BalsaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BalsaError::CompileError(e) => write!(f, "compile error: {}", e),
+            BalsaError::RenderError(e) => write!(f, "render error: {}", e),
         }
     }
 }
@@ -209,6 +244,34 @@ impl Display for InvalidParameter {
     }
 }
 
+impl Display for BalsaRenderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingParameter(e) => e.fmt(f),
+            Self::InvalidParameterType(e) => e.fmt(f),
+        }
+    }
+}
+
+impl Display for MissingParameter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "expected parameter `{}` but no parameter was found and no default value was provided",
+            self.parameter_name
+        )
+    }
+}
+
+impl Display for InvalidParameterType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "parameter `{}` but no parameter was found and no default value was provided",
+            self.parameter_name
+        )
+    }
+}
 // Error constructor functions.
 impl BalsaError {
     /// Creates a [`BalsaError::CompileError`] with the provided [`BalsaCompileError`].
@@ -292,6 +355,38 @@ impl BalsaError {
             pos,
             InvalidParameter { parameter_name },
         )))
+    }
+
+    pub(crate) fn new_render_error(error: BalsaRenderError) -> Self {
+        Self::RenderError(error)
+    }
+
+    /// Creates a new [`BalsaError::RenderError`] which wraps a
+    /// [`RenderError::MissingParameter`] which wraps a [`MissingParameter`] with the provided
+    /// parameter name.
+    pub(crate) fn missing_parameter(parameter_name: String) -> Self {
+        Self::new_render_error(BalsaRenderError::MissingParameter(MissingParameter {
+            parameter_name,
+        }))
+    }
+
+    /// Creates a new [`BalsaError::RenderError`] which wraps a
+    /// [`RenderError::InvalidParameterType`] which wraps a [`InvalidParameterType`] with the provided
+    /// parameter name, parameter_value.
+    pub(crate) fn invalid_parameter_type(
+        parameter_name: String,
+        received_value: BalsaValue,
+        received_type: BalsaType,
+        expected_type: BalsaType,
+    ) -> Self {
+        Self::new_render_error(BalsaRenderError::InvalidParameterType(
+            InvalidParameterType {
+                parameter_name,
+                received_value,
+                received_type,
+                expected_type,
+            },
+        ))
     }
 
     /// Makes a [`TemplateErrorContext<T>`] with the provided `pos` and `error` of type `T`.
