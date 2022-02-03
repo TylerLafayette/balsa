@@ -168,6 +168,14 @@ impl Compiler {
             self.global_scope.variables.insert(identifier, value);
         }
 
+        let instr = ReplacementInstruction {
+            start_pos: block.start_pos as usize,
+            end_pos: block.end_pos as usize,
+            replace_with: ReplaceWith::Nothing,
+        };
+
+        self.replacements.push(instr);
+
         Ok(())
     }
 }
@@ -260,15 +268,22 @@ mod tests {
             );
         }
 
-        let params = vec![ReplacementInstruction {
-            start_pos: 40,
-            end_pos: 80,
-            replace_with: ReplaceWith::Parameter(ParameterDescription {
-                variable_name: "testInt".to_string(),
-                variable_type: BalsaType::Integer,
-                default_value: Some(BalsaValue::Integer(1)),
-            }),
-        }];
+        let params = vec![
+            ReplacementInstruction {
+                start_pos: 0,
+                end_pos: 30,
+                replace_with: ReplaceWith::Nothing,
+            },
+            ReplacementInstruction {
+                start_pos: 40,
+                end_pos: 80,
+                replace_with: ReplaceWith::Parameter(ParameterDescription {
+                    variable_name: "testInt".to_string(),
+                    variable_type: BalsaType::Integer,
+                    default_value: Some(BalsaValue::Integer(1)),
+                }),
+            },
+        ];
 
         assert_eq!(
             output.replacements, params,

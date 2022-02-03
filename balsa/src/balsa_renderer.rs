@@ -41,7 +41,7 @@ impl<'a> Renderer<'a> {
         let mut ctx = RenderContext::new(self.raw_template, parameters);
 
         for replacement in &self.compiled_template.replacements {
-            ctx.next(replacement);
+            ctx.next(replacement)?;
         }
 
         Ok(ctx.output())
@@ -73,7 +73,7 @@ impl<'a> RenderContext<'a> {
                 match value {
                     None => return Err(BalsaError::missing_parameter(p.variable_name.clone())),
                     Some(v) => {
-                        let v = v.try_cast(p.variable_type).map_err(|e| {
+                        let v = v.try_cast(p.variable_type).map_err(|_| {
                             BalsaError::invalid_parameter_type(
                                 p.variable_name.clone(),
                                 v.clone(),
@@ -109,8 +109,11 @@ impl<'a> RenderContext<'a> {
         }
 
         if self.chars_written < replacement.end_pos {
+            // Drop the remaining characters from the block.
             let n = replacement.end_pos - self.chars_written;
-            (&mut self.chars).skip(n).for_each(drop);
+            (&mut self.chars).take(n).for_each(drop);
+
+            self.chars_written += n;
         }
     }
 
@@ -120,5 +123,83 @@ impl<'a> RenderContext<'a> {
         self.output.push_str(&(&mut self.chars).collect::<String>());
 
         self.output
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use crate::{
+        balsa_compiler::{self, ParameterDescription, Scope},
+        balsa_parser, BalsaType,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_render() {
+        let template = r#"
+            <html>
+                {{@
+                    defaultSubtitle : string = "subtitle here"
+                }}
+                <body>
+                    <h1>{{ title : string }}</h1>
+                </body>
+            </html>
+        "#;
+
+        let c = balsa_compiler::Compiler::compile_from_tokens(
+            &balsa_parser::BalsaParser::parse(template.to_string()).unwrap(),
+        )
+        .unwrap();
+
+        // Correct output from the template compiler.
+        let compiled_template = CompiledTemplate {
+            global_scope: Scope {
+                variables: HashMap::from([(
+                    "defaultSubtitle".to_string(),
+                    BalsaValue::String("subtitle here".to_string()),
+                )]),
+            },
+            replacements: vec![
+                ReplacementInstruction {
+                    start_pos: 36,
+                    end_pos: 121,
+                    replace_with: ReplaceWith::Nothing,
+                },
+                ReplacementInstruction {
+                    start_pos: 169,
+                    end_pos: 189,
+                    replace_with: ReplaceWith::Parameter(ParameterDescription {
+                        variable_name: "title".to_string(),
+                        variable_type: BalsaType::String,
+                        default_value: None,
+                    }),
+                },
+            ],
+        };
+
+        let expected_output = r#"
+            <html>
+                
+                <body>
+                    <h1>this is a title</h1>
+                </body>
+            </html>
+        "#;
+
+        let params = BalsaParameters::new().string("title", "this is a title");
+
+        let output = Renderer::new(template, &compiled_template)
+            .render_with_parameters(&params)
+            .expect("Renderer should render with no errors.");
+
+        assert_eq!(
+            &output, expected_output,
+            "Template renderer failed to render template\n\tExpected: {}\n\tGot: {}",
+            expected_output, &output
+        );
     }
 }
