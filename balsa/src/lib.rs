@@ -107,6 +107,18 @@ impl TemplateSource for FileSource {
     }
 }
 
+/// Loads raw template from a string.
+#[derive(Debug, Clone)]
+struct StringSource {
+    raw_template: String,
+}
+
+impl TemplateSource for StringSource {
+    fn read_template(&self) -> BalsaResult<String> {
+        Ok(self.raw_template.clone())
+    }
+}
+
 /// A struct for building a Balsa template from a static HTML document.
 #[derive(Debug)]
 pub struct BalsaBuilder {
@@ -183,6 +195,14 @@ impl Balsa {
         BalsaBuilder {
             template_source: Box::new(FileSource {
                 path: path.as_ref().clone(),
+            }),
+        }
+    }
+    /// Creates a new [`BalsaBuilder`] from the provided template as a string.
+    pub fn from_str(raw_template: impl Into<String>) -> BalsaBuilder {
+        BalsaBuilder {
+            template_source: Box::new(StringSource {
+                raw_template: raw_template.into(),
             }),
         }
     }
