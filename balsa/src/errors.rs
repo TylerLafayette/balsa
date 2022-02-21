@@ -1,13 +1,12 @@
-use std::{fmt::Display, ops::Deref};
+use std::{fmt::Display, io, ops::Deref};
 
-use crate::{
-    balsa_types::{BalsaExpression, BalsaType, BalsaValue},
-    Balsa,
-};
+use crate::balsa_types::{BalsaExpression, BalsaType, BalsaValue};
 
 /// Represents all Balsa errors.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
 pub enum BalsaError {
+    /// Failed to read template from file (IO error).
+    ReadTemplateError(io::Error),
     /// Represents a failure that occurred during template compilation, before being rendered.
     CompileError(BalsaCompileError),
     /// Represents a failure that occurred while rendering a template.
@@ -137,6 +136,7 @@ pub struct InvalidParameterType {
 impl Display for BalsaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            BalsaError::ReadTemplateError(e) => write!(f, "failed to read template file: {}", e),
             BalsaError::CompileError(e) => write!(f, "compile error: {}", e),
             BalsaError::RenderError(e) => write!(f, "render error: {}", e),
         }
@@ -387,6 +387,11 @@ impl BalsaError {
                 expected_type,
             },
         ))
+    }
+
+    /// Creates a new [`BalsaError::ReadTemplateError`] from the provided [`std::io::Error`].
+    pub(crate) fn read_template_error(error: io::Error) -> Self {
+        Self::ReadTemplateError(error)
     }
 
     /// Makes a [`TemplateErrorContext<T>`] with the provided `pos` and `error` of type `T`.

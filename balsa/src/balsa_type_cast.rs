@@ -16,11 +16,11 @@ impl BalsaValue {
         let err = Err(InvalidTypeCast {
             value: self.clone(),
             from: self.get_type(),
-            to: target_type,
+            to: target_type.clone(),
         });
 
         match self {
-            BalsaValue::String(value) => match target_type {
+            BalsaValue::String(value) => match &target_type {
                 BalsaType::String => Ok(self.clone()),
                 BalsaType::Color => {
                     // Strings can be casted to colors only if they are valid.
@@ -32,12 +32,12 @@ impl BalsaValue {
                 }
                 _ => err,
             },
-            BalsaValue::Color(value) => match target_type {
+            BalsaValue::Color(value) => match &target_type {
                 BalsaType::String => Ok(BalsaValue::String(value.clone())),
                 BalsaType::Color => Ok(self.clone()),
                 _ => err,
             },
-            BalsaValue::Integer(value) => match target_type {
+            BalsaValue::Integer(value) => match &target_type {
                 BalsaType::Integer => Ok(self.clone()),
                 BalsaType::Float => {
                     if let Ok(rounded) = i32::try_from(*value) {
@@ -48,10 +48,11 @@ impl BalsaValue {
                 }
                 _ => err,
             },
-            BalsaValue::Float(_value) => match target_type {
+            BalsaValue::Float(_value) => match &target_type {
                 BalsaType::Float => Ok(self.clone()),
                 _ => err,
             },
+            _ => todo!(),
         }
     }
 }

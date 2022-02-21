@@ -40,7 +40,7 @@ pub(crate) struct Block<T> {
     pub(crate) token: T,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Declaration {
     pub(crate) identifier: BalsaExpression,
     pub(crate) variable_type: BalsaExpression,

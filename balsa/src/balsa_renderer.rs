@@ -35,7 +35,7 @@ impl<'a> Renderer<'a> {
 
     /// Renders the template with the given [`BalsaParameters`].
     pub(crate) fn render_with_parameters(
-        &mut self,
+        &self,
         parameters: &'a BalsaParameters,
     ) -> BalsaResult<String> {
         let mut ctx = RenderContext::new(self.raw_template, parameters);
@@ -73,12 +73,12 @@ impl<'a> RenderContext<'a> {
                 match value {
                     None => return Err(BalsaError::missing_parameter(p.variable_name.clone())),
                     Some(v) => {
-                        let v = v.try_cast(p.variable_type).map_err(|_| {
+                        let v = v.try_cast(p.variable_type.clone()).map_err(|_| {
                             BalsaError::invalid_parameter_type(
                                 p.variable_name.clone(),
                                 v.clone(),
                                 v.get_type(),
-                                p.variable_type,
+                                p.variable_type.clone(),
                             )
                         })?;
 
@@ -87,6 +87,7 @@ impl<'a> RenderContext<'a> {
                             BalsaValue::Color(s) => self.output.push_str(s),
                             BalsaValue::Integer(i) => self.output.push_str(&i.to_string()),
                             BalsaValue::Float(f) => self.output.push_str(&f.to_string()),
+                            _ => todo!(),
                         }
                     }
                 }

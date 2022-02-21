@@ -81,7 +81,7 @@ impl Compiler {
 
         let mut param_description = ParameterDescription {
             variable_name: i,
-            variable_type: type_,
+            variable_type: type_.clone(),
             default_value: None,
         };
 
@@ -97,7 +97,7 @@ impl Compiler {
                                     value.clone(),
                                 )
                             })?
-                            .try_cast(type_)
+                            .try_cast(type_.clone())
                             .map_err(|error| {
                                 BalsaError::new_compile_error(BalsaCompileError::InvalidTypeCast(
                                     TemplateErrorContext {
@@ -155,7 +155,7 @@ impl Compiler {
                         declaration.value.clone(),
                     )
                 })?
-                .try_cast(type_)
+                .try_cast(type_.clone())
                 .map_err(|error| {
                     BalsaError::new_compile_error(BalsaCompileError::InvalidTypeCast(
                         TemplateErrorContext {

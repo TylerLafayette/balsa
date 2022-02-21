@@ -1,6 +1,14 @@
-use std::fmt::Display;
+mod dictionary;
+pub(crate) use dictionary::Dictionary;
 
-use crate::BalsaResult;
+mod array;
+pub(crate) use array::Array;
+
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    ops::{Deref, DerefMut},
+};
 
 /// Represents a reference to a variable or key by name without any preceding characters like `$`.
 pub(crate) type BalsaIdentifier = String;
@@ -8,7 +16,7 @@ pub(crate) type BalsaIdentifier = String;
 /// Represents a low-level parsed expression in a Balsa template.
 ///
 /// Should only be used for error-checking.
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BalsaExpression {
     Identifier(BalsaIdentifier),
     Type(BalsaType),
@@ -16,7 +24,7 @@ pub enum BalsaExpression {
 }
 
 /// Represents a typed value in a Balsa template.
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BalsaValue {
     /// A basic string.
     String(String),
@@ -26,10 +34,25 @@ pub enum BalsaValue {
     Integer(i64),
     /// A 64-bit float.
     Float(f64),
+    /// An array of values.
+    Array(Array),
+    /// A dictionary of values indexed by a String.
+    Dictionary(Dictionary),
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq)]
+pub struct RecursiveBalsaType(Box<BalsaType>);
+
+impl Deref for RecursiveBalsaType {
+    type Target = BalsaType;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 /// Represents a type in a Balsa template.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq)]
 pub enum BalsaType {
     /// A basic string.
     String,
@@ -39,6 +62,10 @@ pub enum BalsaType {
     Integer,
     /// A 64-bit float.
     Float,
+    /// An array of the specified type.
+    Array(RecursiveBalsaType),
+    /// A String-indexed dictionary of the specified type.
+    Dictionary(RecursiveBalsaType),
 }
 
 impl BalsaExpression {
@@ -54,7 +81,7 @@ impl BalsaExpression {
     /// Attempt to unwrap a [`BalsaExpression`] as a type.
     pub(crate) fn as_type(&self) -> Option<BalsaType> {
         if let Self::Type(t) = self {
-            Some(*t)
+            Some(t.clone())
         } else {
             None
         }
@@ -78,6 +105,8 @@ impl BalsaValue {
             BalsaValue::Color(_) => BalsaType::Color,
             BalsaValue::Integer(_) => BalsaType::Integer,
             BalsaValue::Float(_) => BalsaType::Float,
+            BalsaValue::Array(_) => todo!(),
+            BalsaValue::Dictionary(_) => todo!(),
         }
     }
 
@@ -104,6 +133,8 @@ impl Display for BalsaValue {
             BalsaValue::Color(c) => write!(f, r#"{}"#, c),
             BalsaValue::Integer(i) => write!(f, r#"{:?}"#, i),
             BalsaValue::Float(f_) => write!(f, r#"{}"#, f_),
+            BalsaValue::Array(_) => todo!(),
+            BalsaValue::Dictionary(_) => todo!(),
         }
     }
 }
@@ -115,6 +146,8 @@ impl Display for BalsaType {
             BalsaType::Color => write!(f, "color"),
             BalsaType::Integer => write!(f, "int"),
             BalsaType::Float => write!(f, "float"),
+            BalsaType::Array(_) => todo!(),
+            BalsaType::Dictionary(_) => todo!(),
         }
     }
 }
