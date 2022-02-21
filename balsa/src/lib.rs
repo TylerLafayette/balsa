@@ -199,7 +199,7 @@ impl Balsa {
         }
     }
     /// Creates a new [`BalsaBuilder`] from the provided template as a string.
-    pub fn from_str(raw_template: impl Into<String>) -> BalsaBuilder {
+    pub fn from_string(raw_template: impl Into<String>) -> BalsaBuilder {
         BalsaBuilder {
             template_source: Box::new(StringSource {
                 raw_template: raw_template.into(),

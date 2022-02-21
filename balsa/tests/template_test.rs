@@ -37,7 +37,7 @@ fn template_test() {
     </html>
     "#;
 
-    let template_builder = Balsa::from_str(test_template.to_string());
+    let template_builder = Balsa::from_string(test_template.to_string());
     let template = template_builder
         .build_struct::<TemplateParams>()
         .expect("Template should successfully compile");
